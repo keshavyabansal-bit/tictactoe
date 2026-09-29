@@ -1,5 +1,6 @@
 import pygame,sys
 import numpy as np
+import random 
 
 pygame.init()
 
@@ -17,16 +18,21 @@ CROSS_COLOR = (66,66,66)
 CROSS_WIDTH = 22
 SPACE = 40
 
+BAR_HEIGHT = 100
+BUTTON_HOVER = (45, 200, 185)
+SHADOW_COLOR = (16, 100, 92)
+
+title_font = pygame.font.Font(None, 100)
 font = pygame.font.Font(None, 50)
-pvp_button = pygame.Rect(150, 180, 300, 80)
-cpu_button = pygame.Rect(150, 340, 300, 80)
-screen = pygame.display.set_mode((WIDTH,HEIGHT))
+small_font = pygame.font.Font(None, 32)
+
+pvp_button = pygame.Rect(100, 260, 400, 90)
+cpu_button = pygame.Rect(100, 390, 400, 90)
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT + BAR_HEIGHT))
+winner = None
 pygame.display.set_caption('TIC TAC TOE')
-
-
-#board
-board=np.zeros((BOARD_ROWS,BOARD_COLS))
-#print(board)
+board=np.zeros((BOARD_ROWS,BOARD_COLS))     #BOARD INITIALISATION (3x3)
 
 def draw_lines():
     pygame.draw.line(screen, LINE_COLOR, (0,200), (600,200), LINE_WIDTH)    #1st horizontal line
@@ -44,6 +50,20 @@ def draw_figure():
                 pygame.draw.line(screen, CROSS_COLOR, (col*200 + SPACE, row *200+200-SPACE), (col*200+200-SPACE, row*200+SPACE), CROSS_WIDTH)
                 pygame.draw.line(screen, CROSS_COLOR, (col*200 + SPACE, row *200+SPACE), (col*200+200-SPACE, row*200+200-SPACE), CROSS_WIDTH)
 
+def draw_status(text, hint="Press R to return to the menu"):
+    pygame.draw.rect(screen, LINE_COLOR, (0, HEIGHT, WIDTH, BAR_HEIGHT))
+    label = font.render(text, True, CIRCLE_COLOR)
+    screen.blit(label, label.get_rect(center=(WIDTH // 2, HEIGHT + 33)))
+    hint_label = small_font.render(hint, True, CROSS_COLOR)
+    screen.blit(hint_label, hint_label.get_rect(center=(WIDTH // 2, HEIGHT + 72)))
+
+def show_result():
+    if winner == 1:
+        draw_status("O wins!")
+    elif winner == 2:
+        draw_status("X wins!")
+    else:
+        draw_status("It's a draw!")
 
 def mark_square(row,col,player):
     board[row][col] = player
@@ -119,25 +139,48 @@ def draw_desc_win_line(player):
 
     pygame.draw.line(screen, color, (15,15), (WIDTH-15, HEIGHT-15), 15)
 
+def draw_button(rect, text):
+    hovered = rect.collidepoint(pygame.mouse.get_pos())  # is the mouse on it?
+    color = BUTTON_HOVER if hovered else LINE_COLOR
+    pygame.draw.rect(screen, SHADOW_COLOR, rect.move(0, 6), border_radius=20)
+    pygame.draw.rect(screen, color, rect, border_radius=20)
+    label = font.render(text, True, CIRCLE_COLOR)
+    screen.blit(label, label.get_rect(center=rect.center))
+
 def draw_menu():
     screen.fill(BG_COLOR)
-    pygame.draw.rect(screen, LINE_COLOR, pvp_button)
-    pygame.draw.rect(screen, LINE_COLOR, cpu_button)
 
-    pvp_text = font.render("Player vs Player", True, CIRCLE_COLOR)
-    cpu_text = font.render("Player vs Computer", True, CIRCLE_COLOR)
-    screen.blit(pvp_text, pvp_text.get_rect(center=pvp_button.center))
-    screen.blit(cpu_text, cpu_text.get_rect(center=cpu_button.center))
+    title = title_font.render("TIC TAC TOE", True, CIRCLE_COLOR)
+    screen.blit(title, title.get_rect(center=(WIDTH // 2, 130)))
+    subtitle = small_font.render("Choose a game mode", True, CROSS_COLOR)
+    screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 200)))
+
+    draw_button(pvp_button, "Player vs Player")
+    draw_button(cpu_button, "Player vs Computer")
+
+    # little O and X decorations at the bottom
+    pygame.draw.circle(screen, CIRCLE_COLOR, (200, 590), 40, 10)
+    pygame.draw.line(screen, CROSS_COLOR, (360, 550), (440, 630), 14)
+    pygame.draw.line(screen, CROSS_COLOR, (360, 630), (440, 550), 14)
 
 def make_move(row, col):
-    global player, game_over
+    global player, game_over, winner
     mark_square(row, col, player)
     draw_figure()
+
     if check_win(player):
         game_over = True
+        winner = player          # 1 = O, 2 = X
     elif is_board_full():
         game_over = True
+        winner = 0               # 0 means draw
+
     player = 2 if player == 1 else 1
+
+    if game_over:
+        show_result()
+    else:
+        draw_status("O's turn" if player == 1 else "X's turn")
 
 def minimax(is_computer_turn):
     # Stopping points: someone won, or it's a draw
@@ -193,7 +236,8 @@ def restart():
 def main():
     draw_menu()
     
-    global player, game_over, state
+    global player, game_over, state, winner
+    winner=None
     state="menu"
     mode=None
     player = 1
@@ -214,17 +258,20 @@ def main():
                     if pvp_button.collidepoint(event.pos):
                         mode = "pvp"
                         state = "playing"
+
                     elif cpu_button.collidepoint(event.pos):
                         mode = "computer"
                         state = "playing"
+
                     if state == "playing":
                         screen.fill(BG_COLOR)
                         draw_lines()
+                        draw_status("O's turn")
 
             else:  # state == "playing"
                 human_turn = (mode == "pvp") or (player == 1)
 
-                if event.type == pygame.MOUSEBUTTONDOWN and not game_over and human_turn:
+                if event.type == pygame.MOUSEBUTTONDOWN and not game_over and human_turn and event.pos[1] < HEIGHT:
                     clicked_row = int(event.pos[1] // 200)
                     clicked_col = int(event.pos[0] // 200)
 
@@ -232,6 +279,9 @@ def main():
                         make_move(clicked_row, clicked_col)
 
                         if mode == "computer" and not game_over:
+                            pygame.display.update()                    
+                            pygame.time.wait(random.randint(200, 600))  
+                            pygame.event.clear()                       
                             computer_move()
 
                 if event.type == pygame.KEYDOWN:
